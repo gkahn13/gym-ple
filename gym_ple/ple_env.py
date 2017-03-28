@@ -64,3 +64,42 @@ class PLEEnv(gym.Env):
         self.game_state.game.rng = self.game_state.rng
 
         self.game_state.init()
+
+class PLEEnvRam(PLEEnv):
+    metadata = {'render.modes': ['human', 'rgb_array']}
+
+    def __init__(self, game_name='FlappyBird', display_screen=True):
+        # open up a game state to communicate with emulator
+        import importlib
+        game_module_name = ('ple.games.%s' % game_name).lower()
+        game_module = importlib.import_module(game_module_name)
+        game = getattr(game_module, game_name)()
+        self.game_state = PLE(game, fps=30, display_screen=display_screen)
+        self.game_state.init()
+        self._action_set = self.game_state.getActionSet()
+        self.action_space = spaces.Discrete(len(self._action_set))
+        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=self._get_game_state().shape)
+        self.viewer = None
+
+    def _step(self, a):
+        reward = self.game_state.act(self._action_set[a])
+        state = self._get_game_state()
+        terminal = self.game_state.game_over()
+        return state, reward, terminal, self.game_state.game.getGameState()
+
+    def _get_game_state(self):
+        gs = self.game_state.game.getGameState()
+        names = sorted(gs.keys())
+        state = np.array([gs[n] for n in names], dtype=np.float64)
+        return state
+
+    @property
+    def _n_actions(self):
+        return len(self._action_set)
+
+    # return: (states, observations)
+    def _reset(self):
+        self.game_state.reset_game()
+        state = self._get_game_state()
+        return state
+
